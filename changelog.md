@@ -2,7 +2,7 @@
 
 ## 4.2.7
 **Fixes**
- * Add support for multiple classloaders when using CoerceUtils.
+ * Add support for multiple classloaders when using CoerceUtils ([Issue #689](https://github.com/yahoo/elide/issues/689))
 
 ## 4.2.6
 **Fixes**
