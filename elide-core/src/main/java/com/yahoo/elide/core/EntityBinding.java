@@ -117,10 +117,24 @@ public class EntityBinding {
         entityClass = cls;
         jsonApiType = type;
         entityName = name;
+        inheritedTypes = getInheritedTypes(cls);
 
         // Map id's, attributes, and relationships
         List<AccessibleObject> fieldOrMethodList = new ArrayList<>();
+		populateFieldOrMethodList(fieldOrMethodList, cls);
 
+    	for (Class<?> inheritedType : inheritedTypes) {
+    		populateFieldOrMethodList(fieldOrMethodList, inheritedType);
+    	}
+
+    	bindEntityFields(cls, type, fieldOrMethodList);
+
+        attributes = dequeToList(attributesDeque);
+        relationships = dequeToList(relationshipsDeque);
+        entityPermissions = new EntityPermissions(dictionary, cls, fieldOrMethodList);
+    }
+
+    private void populateFieldOrMethodList(List<AccessibleObject> fieldOrMethodList, Class<?> cls) {
         fieldOrMethodList.addAll(
                 getInstanceMembers(cls.getDeclaredFields(), (field) -> ! ((Field) field).isSynthetic()));
 
@@ -150,13 +164,6 @@ public class EntityBinding {
             /* Add all public methods */
             fieldOrMethodList.addAll(getInstanceMembers(cls.getMethods()));
         }
-
-        bindEntityFields(cls, type, fieldOrMethodList);
-
-        attributes = dequeToList(attributesDeque);
-        relationships = dequeToList(relationshipsDeque);
-        inheritedTypes = getInheritedTypes(cls);
-        entityPermissions = new EntityPermissions(dictionary, cls, fieldOrMethodList);
     }
 
     /**
@@ -207,24 +214,31 @@ public class EntityBinding {
 
             if (fieldOrMethod.isAnnotationPresent(Id.class)) {
                 bindEntityId(cls, type, fieldOrMethod);
-            } else if (fieldOrMethod.isAnnotationPresent(Transient.class)
-                    && !fieldOrMethod.isAnnotationPresent(ComputedAttribute.class)
-                    && !fieldOrMethod.isAnnotationPresent(ComputedRelationship.class)) {
-                continue; // Transient. Don't serialize
-            } else if (!fieldOrMethod.isAnnotationPresent(Exclude.class)) {
-                if (fieldOrMethod instanceof Field && Modifier.isTransient(((Field) fieldOrMethod).getModifiers())) {
-                    continue; // Transient. Don't serialize
-                }
-                if (fieldOrMethod instanceof Method && Modifier.isTransient(((Method) fieldOrMethod).getModifiers())) {
-                    continue; // Transient. Don't serialize
-                }
-                if (fieldOrMethod instanceof Field
-                        && !fieldOrMethod.isAnnotationPresent(Column.class)
-                        && Modifier.isStatic(((Field) fieldOrMethod).getModifiers())) {
-                    continue; // Field must have Column annotation?
-                }
-                bindAttrOrRelation(fieldOrMethod);
+            } else {
+            	if (fieldOrMethod.isAnnotationPresent(Exclude.class)) {
+            		continue;
+            	}
+            	bindAttrOrRelation(fieldOrMethod);
             }
+
+//            else if (fieldOrMethod.isAnnotationPresent(Transient.class)
+//                    && !fieldOrMethod.isAnnotationPresent(ComputedAttribute.class)
+//                    && !fieldOrMethod.isAnnotationPresent(ComputedRelationship.class)) {
+//                continue; // Transient. Don't serialize
+//            } else if (!fieldOrMethod.isAnnotationPresent(Exclude.class)) {
+//                if (fieldOrMethod instanceof Field && Modifier.isTransient(((Field) fieldOrMethod).getModifiers())) {
+//                    continue; // Transient. Don't serialize
+//                }
+//                if (fieldOrMethod instanceof Method && Modifier.isTransient(((Method) fieldOrMethod).getModifiers())) {
+//                    continue; // Transient. Don't serialize
+//                }
+//                if (fieldOrMethod instanceof Field
+//                        && !fieldOrMethod.isAnnotationPresent(Column.class)
+//                        && Modifier.isStatic(((Field) fieldOrMethod).getModifiers())) {
+//                    continue; // Field must have Column annotation?
+//                }
+//                bindAttrOrRelation(fieldOrMethod);
+//            }
         }
     }
 
