@@ -5,8 +5,40 @@
  */
 package com.yahoo.elide.core;
 
+import java.io.Serializable;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.AccessibleObject;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
+import javax.persistence.GeneratedValue;
+import javax.ws.rs.WebApplicationException;
+
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.yahoo.elide.annotation.Audit;
 import com.yahoo.elide.annotation.CreatePermission;
@@ -44,37 +76,9 @@ import com.yahoo.elide.parsers.expression.CanPaginateVisitor;
 import com.yahoo.elide.security.ChangeSpec;
 import com.yahoo.elide.security.permissions.ExpressionResult;
 import com.yahoo.elide.utils.coerce.CoerceUtil;
+
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
-
-import javax.persistence.GeneratedValue;
-import javax.ws.rs.WebApplicationException;
-import java.io.Serializable;
-import java.lang.annotation.Annotation;
-import java.lang.reflect.AccessibleObject;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 /**
  * Resource wrapper around Entity bean.
@@ -1243,7 +1247,26 @@ public class PersistentResource<T> implements com.yahoo.elide.security.Persisten
                 : dictionary.getId(obj));
         resource.setRelationships(relationshipSupplier.get());
         resource.setAttributes(attributeSupplier.get());
+        resource.setLinks(getResourceLevelLink());
         return resource;
+    }
+
+    /**
+     * Get base resource url of current resource.
+     * @return resource url
+     */
+    protected String getResourceUrl() {
+        StringBuilder result = new StringBuilder();
+        for (String name : lineage.getKeys()) {
+            if (name.equals(getType())) {
+                break;
+            }
+            PersistentResource value = lineage.getRecord(name).get(0);
+            
+            result.append("/").append(String.join("/", value.getType(), value.getId()));
+        }
+        result.append("/").append(String.join("/", getType(), getId()));
+        return result.toString();
     }
 
     /**
@@ -1301,12 +1324,34 @@ public class PersistentResource<T> implements com.yahoo.elide.security.Persisten
             } else {
                 data = new Data<>(resources);
             }
-            // TODO - links
-            relationshipMap.put(field, new Relationship(null, data));
+
+            // Links
+            Map<String, String> relationshipLinks = getRelationshipLinks(field);
+            relationshipMap.put(field, new Relationship(relationshipLinks, data));
         }
 
         return relationshipMap;
     }
+
+    /**
+     * Get resource level self link.
+     * @return self link of current resource
+     */
+    protected Map<String, String> getResourceLevelLink() {
+        return ImmutableMap.of("self", getResourceUrl());
+    }
+    /**
+     * 
+	 * Get relationship links based for current resource.
+	 * @param field relationship field
+	 * @return links for relationship object
+	 */
+	protected Map<String, String> getRelationshipLinks(final String field) {
+	    String resourceUrl = getResourceUrl();
+	    return ImmutableMap.of(
+	            "self", String.join("/", resourceUrl, "relationships", field),
+	            "related", String.join("/", resourceUrl, field));
+	}
 
     /**
      * Get attributes mapping from entity.
